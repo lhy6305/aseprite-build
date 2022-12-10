@@ -45,7 +45,7 @@ jobs:
         else
           export enable_ccache=on
         fi
-        curl -L https://github.com/aseprite/skia/releases/download/m96-2f1f21b8a9/Skia-${{ runner.os }}-Release-x64.zip --output skia.zip
+        curl -L "https://github.com/aseprite/skia/releases/download/m96-2f1f21b8a9/Skia-${{ runner.os }}-Release-x64.zip" --output skia.zip
         7z x -o./skia skia.zip
     - name: Generating Makefiles
       shell: bash
