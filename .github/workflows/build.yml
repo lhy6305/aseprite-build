@@ -1,5 +1,5 @@
 name: build
-on: [push, pull_request, workflow_dispatch]
+on: [workflow_dispatch]
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -59,4 +59,4 @@ jobs:
       with:
         name: aseprite
         path: |
-          D:/a/aseprite/aseprite/build/bin/
+          D:/a/aseprite-build/aseprite-build/build/bin/
