@@ -1,5 +1,5 @@
 // Aseprite UI Library
-// Copyright (C) 2018-2022  Igara Studio S.A.
+// Copyright (C) 2018-2023  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This file is released under the terms of the MIT license.
@@ -1034,6 +1034,15 @@ void Widget::setMaxSize(const gfx::Size& sz)
   m_maxSize = sz;
 }
 
+void Widget::setMinMaxSize(const gfx::Size& minSz,
+                           const gfx::Size& maxSz)
+{
+  ASSERT(minSz.w <= maxSz.w);
+  ASSERT(minSz.h <= maxSz.h);
+  m_minSize = minSz;
+  m_maxSize = maxSz;
+}
+
 void Widget::resetMinSize()
 {
   m_minSize = gfx::Size(0, 0);
@@ -1557,6 +1566,7 @@ bool Widget::onProcessMessage(Message* msg)
       MouseMessage mouseMsg2(kMouseDownMessage,
                              *mouseMsg,
                              mouseMsg->position());
+      mouseMsg2.setRecipient(this);
       mouseMsg2.setDisplay(mouseMsg->display());
       sendMessage(&mouseMsg2);
       break;

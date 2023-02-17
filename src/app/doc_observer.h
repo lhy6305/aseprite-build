@@ -1,5 +1,5 @@
 // Aseprite
-// Copyright (C) 2018-2022  Igara Studio S.A.
+// Copyright (C) 2018-2023  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
@@ -8,6 +8,10 @@
 #ifndef APP_DOC_OBSERVER_H_INCLUDED
 #define APP_DOC_OBSERVER_H_INCLUDED
 #pragma once
+
+namespace doc {
+  class Remap;
+}
 
 namespace app {
   class Doc;
@@ -91,6 +95,12 @@ namespace app {
 
     // The collapsed/expanded flag of a specific layer changed.
     virtual void onLayerCollapsedChanged(DocEvent& ev) { }
+
+    // The tileset was remapped (e.g. when tiles are re-ordered).
+    virtual void onRemapTileset(DocEvent& ev, const doc::Remap& remap) { }
+
+    // When the tile management plugin property is changed.
+    virtual void onTileManagementPluginChange(DocEvent& ev) { }
 
   };
 
