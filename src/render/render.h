@@ -1,5 +1,5 @@
 // Aseprite Render Library
-// Copyright (c) 2019-2022 Igara Studio S.A.
+// Copyright (c) 2019-2023 Igara Studio S.A.
 // Copyright (c) 2001-2018 David Capello
 //
 // This file is released under the terms of the MIT license.
@@ -28,6 +28,7 @@ namespace doc {
   class Image;
   class Layer;
   class Palette;
+  class RenderPlan;
   class Sprite;
   class Tileset;
 }
@@ -158,16 +159,15 @@ namespace render {
       const frame_t frame,
       const CompositeImageFunc compositeImage);
 
-    void renderLayer(
-      const Layer* layer,
+    void renderPlan(
+      doc::RenderPlan& plan,
       Image* image,
       const gfx::Clip& area,
       const frame_t frame,
       const CompositeImageFunc compositeImage,
       const bool render_background,
       const bool render_transparent,
-      const BlendMode blendMode,
-      bool isSelected);
+      const BlendMode blendMode);
 
     void renderCel(
       Image* dst_image,

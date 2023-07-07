@@ -1,5 +1,5 @@
 // Aseprite
-// Copyright (C) 2020-2022  Igara Studio S.A.
+// Copyright (C) 2020-2023  Igara Studio S.A.
 // Copyright (C) 2017-2018  David Capello
 //
 // This program is distributed under the terms of
@@ -15,6 +15,10 @@
 #include <map>
 #include <string>
 #include <vector>
+
+namespace ui {
+  class Widget;
+}
 
 namespace app {
 
@@ -111,6 +115,11 @@ namespace app {
 #ifdef ENABLE_SCRIPTING
     void addCommand(const std::string& id);
     void removeCommand(const std::string& id);
+
+    void addMenuGroup(const std::string& id);
+    void removeMenuGroup(const std::string& id);
+
+    void addMenuSeparator(ui::Widget* widget);
 #endif
 
     bool isEnabled() const { return m_isEnabled; }
@@ -155,9 +164,10 @@ namespace app {
       ScriptItem(const std::string& fn);
     };
     struct PluginItem {
-      enum Type { Command };
+      enum Type { Command, MenuGroup, MenuSeparator };
       Type type;
       std::string id;
+      ui::Widget* widget = nullptr;
     };
     struct Plugin {
       int pluginRef;

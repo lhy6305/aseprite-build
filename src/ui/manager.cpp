@@ -639,7 +639,10 @@ void Manager::handleMouseDown(Display* display,
                               PointerType pointerType,
                               const float pressure)
 {
-  handleWindowZOrder();
+  // Returns false in case that we click another Display (os::Window)
+  // that is not the current running top-most foreground window.
+  if (!handleWindowZOrder())
+    return;
 
   enqueueMessage(
     newMouseMessage(
@@ -730,45 +733,49 @@ void Manager::handleTouchMagnify(Display* display,
 // window that aren't the desktop).
 //
 // TODO code similar to Display::handleWindowZOrder()
-void Manager::handleWindowZOrder()
+bool Manager::handleWindowZOrder()
 {
   if (capture_widget || !mouse_widget)
-    return;
+    return true;
 
   // The clicked window
   Window* window = mouse_widget->window();
-  Manager* win_manager = (window ? window->manager(): nullptr);
+  Window* topWindow = getTopWindow();
 
   if ((window) &&
-    // We cannot change Z-order of desktop windows
-    (!window->isDesktop()) &&
-    // We cannot change Z order of foreground windows because a
-    // foreground window can launch other background windows
-    // which should be kept on top of the foreground one.
-    (!window->isForeground()) &&
-    // If the window is not already the top window of the manager.
-    (window != win_manager->getTopWindow())) {
-    base::ScopedValue<Widget*> scoped(m_lockedWindow, window, nullptr);
+      // We cannot change Z-order of desktop windows
+      (!window->isDesktop()) &&
+      // We cannot change Z order of foreground windows because a
+      // foreground window can launch other background windows
+      // which should be kept on top of the foreground one.
+      (!window->isForeground()) &&
+      // If the window is not already the top window of the manager.
+      (window != topWindow)) {
+    // If there is already a top foreground window, cancel the z-order change
+    if (topWindow && topWindow->isForeground())
+      return false;
+
+    base::ScopedValue<Widget*> scoped(m_lockedWindow, window);
 
     window->display()->handleWindowZOrder(window);
 
     // Put it in the top of the list
-    win_manager->removeChild(window);
+    removeChild(window);
 
     if (window->isOnTop())
-      win_manager->insertChild(0, window);
+      insertChild(0, window);
     else {
-      int pos = (int)win_manager->children().size();
+      int pos = (int)children().size();
 
-      for (auto it=win_manager->children().rbegin(),
-             end=win_manager->children().rend();
+      for (auto it=children().rbegin(),
+             end=children().rend();
            it != end; ++it) {
         if (static_cast<Window*>(*it)->isOnTop())
           break;
 
         --pos;
       }
-      win_manager->insertChild(pos, window);
+      insertChild(pos, window);
     }
 
     if (!window->ownDisplay())
@@ -777,6 +784,7 @@ void Manager::handleWindowZOrder()
 
   // Put the focus
   setFocus(mouse_widget);
+  return true;
 }
 
 // If display is nullptr, mousePos is in screen coordinates, if not,
@@ -784,8 +792,14 @@ void Manager::handleWindowZOrder()
 void Manager::updateMouseWidgets(const gfx::Point& mousePos,
                                  Display* display)
 {
-  gfx::Point screenPos = (display ? display->nativeWindow()->pointToScreen(mousePos):
-                                    mousePos);
+  gfx::Point screenPos;
+  if (display) {
+    screenPos = display->nativeWindow()->pointToScreen(mousePos);
+    display->updateLastMousePos(mousePos);
+  }
+  else {
+    screenPos = mousePos;
+  }
 
   // Get the list of widgets to send mouse messages.
   mouse_widgets_list.clear();
@@ -1334,6 +1348,16 @@ void Manager::_openWindow(Window* window, bool center)
     freeFocus();
   }
 
+  // Relayout before inserting the window to the list of children widgets prevents
+  // the manager to invalidate a window currently being laid out when
+  // ui::Manager::getDefault()->invalidate() is called. This situation could happen,
+  // for instance, when a script opens a dialog whose canvas.onpaint handler opens
+  // another dialog, because the onpaint handler is executed during window layout.
+  if (center)
+    window->centerWindow(parentDisplay);
+  else
+    window->layout();
+
   // Add the window to manager.
   insertChild(0, window);
 
@@ -1342,12 +1366,6 @@ void Manager::_openWindow(Window* window, bool center)
     Message msg(kOpenMessage);
     window->sendMessage(&msg);
   }
-
-  // Relayout
-  if (center)
-    window->centerWindow(parentDisplay);
-  else
-    window->layout();
 
   // If the window already was set a display, we don't setup it
   // (i.e. in the case of combobox popup/window the display field is

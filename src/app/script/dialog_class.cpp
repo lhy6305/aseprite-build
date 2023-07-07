@@ -35,6 +35,7 @@
 #include "ui/manager.h"
 #include "ui/menu.h"
 #include "ui/message.h"
+#include "ui/scale.h"
 #include "ui/separator.h"
 #include "ui/slider.h"
 #include "ui/system.h"
@@ -255,8 +256,9 @@ int Dialog_new(lua_State* L)
   if (!App::instance()->isGui())
     return 0;
 
-  // Get the title, if it's empty, create a window without title bar
-  std::string title;
+  // Get the title and the type of window (with or without title bar)
+  ui::Window::Type windowType = ui::Window::WithTitleBar;
+  std::string title = "Script";
   if (lua_isstring(L, 1)) {
     title = lua_tostring(L, 1);
   }
@@ -265,11 +267,14 @@ int Dialog_new(lua_State* L)
     if (type != LUA_TNIL)
       title = lua_tostring(L, -1);
     lua_pop(L, 1);
+
+    type = lua_getfield(L, 1, "notitlebar");
+    if (type != LUA_TNIL && lua_toboolean(L, -1))
+      windowType = ui::Window::WithoutTitleBar;
+    lua_pop(L, 1);
   }
 
-  auto dlg = push_new<Dialog>(
-    L, (!title.empty() ? ui::Window::WithTitleBar:
-                         ui::Window::WithoutTitleBar), title);
+  auto dlg = push_new<Dialog>(L, windowType, title);
 
   // The uservalue of the dialog userdata will contain a table that
   // stores all the callbacks to handle events. As these callbacks can
@@ -466,10 +471,11 @@ int Dialog_add_widget(lua_State* L, Widget* widget)
     // specific widget is not expansive (e.g. a canvas with a fixed
     // size)
     type = lua_getfield(L, 2, "hexpand");
+    if (type != LUA_TNIL) hexpand = lua_toboolean(L, -1);
+    lua_pop(L, 1);
     type = lua_getfield(L, 2, "vexpand");
-    if (type != LUA_TNIL) hexpand = lua_toboolean(L, -2);
     if (type != LUA_TNIL) vexpand = lua_toboolean(L, -1);
-    lua_pop(L, 2);
+    lua_pop(L, 1);
   }
 
   if (label || !dlg->hbox) {
@@ -610,7 +616,7 @@ int Dialog_button_base(lua_State* L, T** outputWidget = nullptr)
     if (type == LUA_TFUNCTION) {
       Dialog_connect_signal(
         L, 1, widget->Click,
-        [dlg, widget](lua_State* L){
+        [](lua_State*){
           // Do nothing
         });
       closeWindowByDefault = false;
@@ -619,7 +625,7 @@ int Dialog_button_base(lua_State* L, T** outputWidget = nullptr)
   }
 
   if (closeWindowByDefault) {
-    widget->Click.connect([dlg, widget](){
+    widget->Click.connect([widget](){
       widget->closeWindow();
     });
   }
@@ -1012,7 +1018,10 @@ static void fill_keymessage_values(lua_State* L, const ui::KeyMessage* msg)
 
   // KeyMessage specifics
   lua_pushinteger(L, msg->repeat());
-  lua_setfield(L, -2, "repeat");
+  lua_setfield(L, -2, "repeat"); // Only for backward compatibility, remove this in a future
+
+  lua_pushinteger(L, msg->repeat());
+  lua_setfield(L, -2, "repeatCount");
 
   // TODO improve this (create an Event metatable)
   lua_pushcfunction(L, [](lua_State*) -> int {
@@ -1095,6 +1104,15 @@ int Dialog_canvas(lua_State* L)
     }
     lua_pop(L, 1);
 
+    type = lua_getfield(L, 2, "autoScaling");
+    if (type != LUA_TNIL) {
+      widget->setAutoScaling(lua_toboolean(L, -1));
+    }
+    lua_pop(L, 1);
+
+    if (widget->isAutoScaling())
+      sz *= ui::guiscale();
+
     widget->setSizeHint(sz);
 
     bool handleKeyEvents = false;
@@ -1139,6 +1157,12 @@ int Dialog_canvas(lua_State* L)
       type = lua_getfield(L, 2, "onmouseup");
       if (type == LUA_TFUNCTION) {
         Dialog_connect_signal(L, 1, widget->MouseUp, fill_mousemessage_values);
+      }
+      lua_pop(L, 1);
+
+      type = lua_getfield(L, 2, "ondblclick");
+      if (type == LUA_TFUNCTION) {
+        Dialog_connect_signal(L, 1, widget->DoubleClick, fill_mousemessage_values);
       }
       lua_pop(L, 1);
 
@@ -1348,7 +1372,11 @@ int Dialog_modify(lua_State* L)
 
     // TODO shades mode? file title / open / save / filetypes? on* events?
 
-    if (relayout) {
+    // Relayout only if the the dialog window is not being resized.
+    // This is due to the possibility of a script calling a method
+    // to modify dialog's properties (which might generate a relayout)
+    // during an ongoing resize event.
+    if (relayout && !dlg->window.isResizing()) {
       dlg->window.layout();
 
       gfx::Rect bounds(dlg->window.bounds().w,

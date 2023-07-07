@@ -16,6 +16,7 @@
 #include "doc/remap.h"
 
 #include <any>
+#include <cstddef>
 #include <variant>
 
 namespace app {
@@ -27,7 +28,7 @@ namespace script {
 // nullptr_t
 
 template<>
-void push_value_to_lua(lua_State* L, const nullptr_t&) {
+void push_value_to_lua(lua_State* L, const std::nullptr_t&) {
   TRACEARGS("push_value_to_lua nullptr_t");
   lua_pushnil(L);
 }
@@ -142,6 +143,19 @@ void push_value_to_lua(lua_State* L, const doc::Remap& value) {
 }
 
 // ----------------------------------------------------------------------
+// app::Params
+
+template<>
+void push_value_to_lua(lua_State* L, const Params& params) {
+  lua_newtable(L);
+  for (const auto& param : params) {
+    lua_pushstring(L, param.first.c_str());
+    lua_pushstring(L, param.second.c_str());
+    lua_rawset(L, -3);
+  }
+}
+
+// ----------------------------------------------------------------------
 // std::any
 
 template<>
@@ -154,10 +168,15 @@ void push_value_to_lua(lua_State* L, const std::any& value) {
     push_value_to_lua(L, *v);
   else if (auto v = std::any_cast<std::string>(&value))
     push_value_to_lua(L, *v);
+  else if (auto v = std::any_cast<lua_CFunction>(&value))
+    lua_pushcfunction(L, *v);
   else if (auto v = std::any_cast<const doc::Remap*>(&value))
     push_value_to_lua(L, **v);
   else if (auto v = std::any_cast<const doc::Tileset*>(&value))
     push_tileset(L, *v);
+  else if (auto v = std::any_cast<const Params>(&value)) {
+    push_value_to_lua(L, *v);
+  }
   else {
     ASSERT(false);
     throw std::runtime_error("Cannot convert type inside std::any");
@@ -214,6 +233,19 @@ void push_value_to_lua(lua_State* L, const gfx::Rect& value) {
 template<>
 gfx::Rect get_value_from_lua(lua_State* L, int index) {
   return convert_args_into_rect(L, index);
+}
+
+// ----------------------------------------------------------------------
+// Uuid
+
+template<>
+void push_value_to_lua(lua_State* L, const base::Uuid& value) {
+  push_obj(L, value);
+}
+
+template<>
+base::Uuid get_value_from_lua(lua_State* L, int index) {
+  return convert_args_into_uuid(L, index);
 }
 
 // ----------------------------------------------------------------------
@@ -315,7 +347,7 @@ void push_value_to_lua(lua_State* L, const doc::UserData::Variant& value)
 #if 1 // We are targetting macOS 10.9, so we don't have the std::visit() available
   switch (value.type()) {
     case USER_DATA_PROPERTY_TYPE_NULLPTR:
-      push_value_to_lua<nullptr_t>(L, nullptr);
+      push_value_to_lua<std::nullptr_t>(L, nullptr);
       break;
     case USER_DATA_PROPERTY_TYPE_BOOL:
       push_value_to_lua(L, *std::get_if<bool>(&value));
@@ -371,6 +403,9 @@ void push_value_to_lua(lua_State* L, const doc::UserData::Variant& value)
     case USER_DATA_PROPERTY_TYPE_PROPERTIES:
       push_value_to_lua(L, *std::get_if<doc::UserData::Properties>(&value));
       break;
+    case USER_DATA_PROPERTY_TYPE_UUID:
+      push_value_to_lua(L, *std::get_if<base::Uuid>(&value));
+      break;
   }
 #else // TODO enable this in the future
   std::visit([L](auto&& v){ push_value_to_lua(L, v); }, value);
@@ -394,8 +429,21 @@ doc::UserData::Variant get_value_from_lua(lua_State* L, int index)
       break;
 
     case LUA_TNUMBER:
-      if (lua_isinteger(L, index))
-        v = lua_tointeger(L, index);
+      if (lua_isinteger(L, index)) {
+        // This is required because some compilers/stdc++ impls
+        // (clang-10 + libstdc++ 7.5.0) don't convert "long long" type
+        // to "int64_t" automatically (?)
+        if constexpr (sizeof(lua_Integer) == 8) {
+          v = (int64_t)lua_tointeger(L, index);
+        }
+        else if constexpr (sizeof(lua_Integer) == 4) {
+          v = (int32_t)lua_tointeger(L, index);
+        }
+        else {
+          static_assert((sizeof(lua_Integer) == 8 ||
+                         sizeof(lua_Integer) == 4), "Invalid lua_Integer size");
+        }
+      }
       else {
         v = lua_tonumber(L, index);
       }
@@ -413,8 +461,6 @@ doc::UserData::Variant get_value_from_lua(lua_State* L, int index)
       lua_pushnil(L);
       while (lua_next(L, index) != 0) {
         if (lua_isinteger(L, -2)) {
-          // TODO we should check that all values are of the same type
-          //      to create the vector
           if (++i != lua_tointeger(L, -2)) {
             isArray = false;
             lua_pop(L, 2);  // Pop value and key
@@ -448,6 +494,9 @@ doc::UserData::Variant get_value_from_lua(lua_State* L, int index)
       }
       else if (auto sz = may_get_obj<gfx::Size>(L, index)) {
         v = *sz;
+      }
+      else if (auto uuid = may_get_obj<base::Uuid>(L, index)) {
+        v = *uuid;
       }
       break;
     }
@@ -509,7 +558,6 @@ doc::UserData::Vector get_value_from_lua(lua_State* L, int index)
     --index;
   lua_pushnil(L);
   while (lua_next(L, index) != 0) {
-    // TODO we should check that all variants are of the same type
     v.push_back(get_value_from_lua<doc::UserData::Variant>(L, -1));
     lua_pop(L, 1);
   }

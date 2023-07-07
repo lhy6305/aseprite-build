@@ -1,5 +1,5 @@
 // Aseprite
-// Copyright (C) 2018-2022  Igara Studio S.A.
+// Copyright (C) 2018-2023  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
@@ -155,6 +155,11 @@ DocApi Doc::getApi(Transaction& transaction)
 
 //////////////////////////////////////////////////////////////////////
 // Main properties
+
+bool Doc::isUndoing() const
+{
+  return m_undo->isUndoing();
+}
 
 color_t Doc::bgColor() const
 {
@@ -325,6 +330,25 @@ void Doc::markAsBackedUp()
 bool Doc::isFullyBackedUp() const
 {
   return (m_flags & kFullyBackedUp ? true: false);
+}
+
+void Doc::markAsReadOnly()
+{
+  DOC_TRACE("DOC: Mark as read-only", this);
+
+  m_flags |= kReadOnly;
+}
+
+bool Doc::isReadOnly() const
+{
+  return (m_flags & kReadOnly ? true: false);
+}
+
+void Doc::removeReadOnlyMark()
+{
+  DOC_TRACE("DOC: Read-only mark removed", this);
+
+  m_flags &= ~kReadOnly;
 }
 
 //////////////////////////////////////////////////////////////////////

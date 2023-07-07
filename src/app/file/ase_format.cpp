@@ -54,6 +54,10 @@ public:
     m_fop->setError(msg.c_str());
   }
 
+  void incompatibilityError(const std::string& msg) override {
+    m_fop->setIncompatibilityError(msg);
+  }
+
   void progress(double fromZeroToOne) override {
     m_fop->setProgress(fromZeroToOne);
   }
@@ -80,7 +84,7 @@ public:
 
   doc::Sprite* sprite() { return m_sprite; }
 
-  bool cacheCompressedTilesets() const {
+  bool cacheCompressedTilesets() const override {
     return m_fop->config().cacheCompressedTilesets;
   }
 
@@ -986,7 +990,8 @@ static void ase_file_write_cel_chunk(FILE* f, dio::AsepriteFrameHeader* frame_he
   fputw(cel->y(), f);
   fputc(cel->opacity(), f);
   fputw(cel_type, f);
-  ase_file_write_padding(f, 7);
+  fputw(cel->zIndex(), f);
+  ase_file_write_padding(f, 5);
 
   switch (cel_type) {
 
@@ -1508,10 +1513,6 @@ static void ase_file_write_tileset_chunk(FILE* f, FileOp* fop,
 static void ase_file_write_property_value(FILE* f,
                                           const UserData::Variant& value)
 {
-  // TODO reduce value type depending on the actual value we're going
-  // to save (e.g. we don't need to save a 64-bit integer if the
-  // value=30, we can use a uint8_t for that case)
-
   switch (value.type()) {
     case USER_DATA_PROPERTY_TYPE_NULLPTR:
       ASSERT(false);
@@ -1568,29 +1569,55 @@ static void ase_file_write_property_value(FILE* f,
       break;
     }
     case USER_DATA_PROPERTY_TYPE_VECTOR: {
-      auto& v = *std::get_if<UserData::Vector>(&value);
-      fputl(v.size(), f);
-      const uint16_t type = (v.empty() ? 0 : v.front().type());
+      auto& vector = *std::get_if<UserData::Vector>(&value);
+      fputl(vector.size(), f);
+
+      const uint16_t type = doc::all_elements_of_same_type(vector);
       fputw(type, f);
-      for (const auto& elem : v) {
-        ASSERT(type == elem.type()); // Check that all elements have the same type
-        ase_file_write_property_value(f, elem);
+
+      for (const auto& elem : vector) {
+        UserData::Variant v = elem;
+
+        // Reduce each element if possible, because each element has
+        // its own type.
+        if (type == 0) {
+          if (is_reducible_int(v)) {
+            v = reduce_int_type_size(v);
+          }
+          fputw(v.type(), f);
+        }
+        // Reduce to the smaller/common int type.
+        else if (is_reducible_int(v) && type < v.type()) {
+          v = cast_to_smaller_int_type(v, type);
+        }
+
+        ase_file_write_property_value(f, v);
       }
       break;
     }
     case USER_DATA_PROPERTY_TYPE_PROPERTIES: {
       auto& properties = *std::get_if<UserData::Properties>(&value);
       ASSERT(properties.size() > 0);
-
       fputl(properties.size(), f);
-      for (auto property : properties) {
+
+      for (const auto& property : properties) {
         const std::string& name = property.first;
         ase_file_write_string(f, name);
 
-        const UserData::Variant& value = property.second;
-        fputw(value.type(), f);
+        UserData::Variant v = property.second;
+        if (is_reducible_int(v)) {
+          v = reduce_int_type_size(v);
+        }
+        fputw(v.type(), f);
 
-        ase_file_write_property_value(f, value);
+        ase_file_write_property_value(f, v);
+      }
+      break;
+    }
+    case USER_DATA_PROPERTY_TYPE_UUID: {
+      auto& uuid = *std::get_if<base::Uuid>(&value);
+      for (int i=0; i<16; ++i) {
+        fputc(uuid[i], f);
       }
       break;
     }
@@ -1611,7 +1638,7 @@ static void ase_file_write_properties_maps(FILE* f, FileOp* fop,
   fputl(0, f);
 
   fputl(nmaps, f);
-  for (auto propertiesMap : propertiesMaps) {
+  for (const auto& propertiesMap : propertiesMaps) {
     const UserData::Properties& properties = propertiesMap.second;
     // Skip properties map if it doesn't have any property
     if (properties.empty())
