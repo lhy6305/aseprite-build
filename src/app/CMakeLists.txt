@@ -184,6 +184,7 @@ if(ENABLE_SCRIPTING)
     script/image_iterator_class.cpp
     script/image_spec_class.cpp
     script/images_class.cpp
+    script/json_class.cpp
     script/keys.cpp
     script/layer_class.cpp
     script/layers_class.cpp
@@ -206,6 +207,7 @@ if(ENABLE_SCRIPTING)
     script/slices_class.cpp
     script/sprite_class.cpp
     script/sprites_class.cpp
+    script/tabs_widget.cpp
     script/tag_class.cpp
     script/tags_class.cpp
     script/tile_class.cpp
@@ -216,6 +218,7 @@ if(ENABLE_SCRIPTING)
     script/uuid_class.cpp
     script/values.cpp
     script/version_class.cpp
+    script/window_class.cpp
     shell.cpp
     ${scripting_files_ws}
     ${scripting_files_ui})
@@ -328,6 +331,7 @@ if(ENABLE_UI)
     commands/set_playback_speed.cpp
     commands/show_menu.cpp
     commands/tileset_mode.cpp
+    commands/toggle_other_layers_opacity.cpp
     commands/toggle_play_option.cpp
     file_selector.cpp
     modules/gfx.cpp
@@ -537,6 +541,7 @@ add_library(app-lib
   cmd/set_tile_data_properties.cpp
   cmd/set_tile_data_property.cpp
   cmd/set_tileset_base_index.cpp
+  cmd/set_tileset_match_flags.cpp
   cmd/set_tileset_name.cpp
   cmd/set_total_frames.cpp
   cmd/set_transparent_color.cpp
@@ -692,6 +697,8 @@ add_library(app-lib
   util/range_utils.cpp
   util/readable_time.cpp
   util/resize_image.cpp
+  util/tile_flags_utils.cpp
+  util/tileset_utils.cpp
   util/wrap_point.cpp
   xml_document.cpp
   xml_exception.cpp
